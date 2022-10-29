@@ -9,12 +9,13 @@ locals {
 
 resource "aws_launch_configuration" "example" {
   
-  image_id = "ami-08c40ec9ead489470"
+  image_id = var.ami
   instance_type = var.instance_type
   security_groups = [aws_security_group.instance.id,aws_security_group.terrassh.id]
   key_name = "linux"
 
   user_data = templatefile("${path.module}/user-data.sh", {
+    server_text = var.server_text
     server_port = var.port
     mysql_address  = data.terraform_remote_state.db.outputs.mysql_address
     mysql_port     = data.terraform_remote_state.db.outputs.mysql_port
@@ -32,14 +33,48 @@ resource "aws_autoscaling_group" "example" {
   target_group_arns = [aws_lb_target_group.asg.arn]
   health_check_type = "ELB"
 
-  min_size = var.min_size
-  max_size = var.max_size
+  min_size          = var.min_size
+  max_size          = var.max_size
+
+  dynamic "tag" {
+    for_each = var.custom_tags
+
+    content {
+      key                 = tag.key
+      value               = tag.value
+      propagate_at_launch = true
+    }
+  }
 
   tag {
     key                 = "Name"
     value               = "${var.cluster_name}-asg"
     propagate_at_launch = true
   }
+}
+
+resource "aws_autoscaling_schedule" "scale_out_during_business_hours" {
+  count = var.enable_autoscaling ? 1 : 0
+
+  scheduled_action_name = "scale-out-during-business-hours"
+  min_size              = 2
+  max_size              = 10
+  desired_capacity      = 10
+  recurrence            = "0 9 * * *"
+
+  autoscaling_group_name = module.webserver_cluster.asg_name
+}
+
+resource "aws_autoscaling_schedule" "scale_in_at_night" {
+  count = var.enable_autoscaling ? 1 : 0
+
+  scheduled_action_name = "scale-in-at-night"
+  min_size              = 2
+  max_size              = 10
+  desired_capacity      = 2
+  recurrence            = "0 17 * * *"
+
+  autoscaling_group_name = module.webserver_cluster.asg_name
 }
 
 resource "aws_security_group" "instance" {
