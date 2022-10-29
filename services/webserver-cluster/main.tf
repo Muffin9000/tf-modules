@@ -8,17 +8,17 @@ locals {
 }
 
 resource "aws_launch_configuration" "example" {
-  
-  image_id = var.ami
-  instance_type = var.instance_type
+  name            = "${var.cluster_name}-launch-configuration" 
+  image_id        = var.ami
+  instance_type   = var.instance_type
   security_groups = [aws_security_group.instance.id,aws_security_group.terrassh.id]
-  key_name = "linux"
+  key_name        = "linux"
 
   user_data = templatefile("${path.module}/user-data.sh", {
-    server_text = var.server_text
-    server_port = var.port
-    mysql_address  = data.terraform_remote_state.db.outputs.mysql_address
-    mysql_port     = data.terraform_remote_state.db.outputs.mysql_port
+    server_text     = var.server_text
+    server_port     = var.port
+    mysql_address   = data.terraform_remote_state.db.outputs.mysql_address
+    mysql_port      = data.terraform_remote_state.db.outputs.mysql_port
   })
   
   lifecycle {
@@ -27,14 +27,25 @@ resource "aws_launch_configuration" "example" {
 }
 
 resource "aws_autoscaling_group" "example" {
+  name  = var.cluster_name
+
   launch_configuration = aws_launch_configuration.example.name
   vpc_zone_identifier = data.aws_subnets.default.ids
+
+  protect_from_scale_in = var.protect_from_scale_in
 
   target_group_arns = [aws_lb_target_group.asg.arn]
   health_check_type = "ELB"
 
   min_size          = var.min_size
   max_size          = var.max_size
+
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 50
+    }
+  }
 
   dynamic "tag" {
     for_each = var.custom_tags
@@ -62,7 +73,7 @@ resource "aws_autoscaling_schedule" "scale_out_during_business_hours" {
   desired_capacity      = 10
   recurrence            = "0 9 * * *"
 
-  autoscaling_group_name = module.webserver_cluster.asg_name
+  autoscaling_group_name = var.asg_name
 }
 
 resource "aws_autoscaling_schedule" "scale_in_at_night" {
@@ -74,7 +85,7 @@ resource "aws_autoscaling_schedule" "scale_in_at_night" {
   desired_capacity      = 2
   recurrence            = "0 17 * * *"
 
-  autoscaling_group_name = module.webserver_cluster.asg_name
+  autoscaling_group_name = var.asg_name 
 }
 
 resource "aws_security_group" "instance" {

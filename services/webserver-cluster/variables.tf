@@ -56,3 +56,14 @@ variable "server_text" {
   type        = string
   default     = "Hello, World"
 }
+
+variable "asg_name" {
+  description = "ASG name"
+  type = string
+}
+
+variable "protect_from_scale_in" {
+  description = "protecting from scaling"
+  type        = bool
+  default     = false
+}
